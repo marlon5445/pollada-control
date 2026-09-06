@@ -93,21 +93,15 @@ export default function AppPollada() {
     setView('dashboard')
   }
 
+  // --- BORRAR EVENTO SIN CONTRASEÑA ---
   async function borrarEvento() {
     const result = await saasSwal.fire({
       title: '⚠️ ¿Borrar Evento?',
-      html: 'Se perderá todo el progreso financiero de manera irreversible.<br/><br/><b>Ingresa la contraseña para confirmar:</b>',
+      html: 'Se perderá todo el progreso financiero de manera irreversible.<br/><br/><b>¿Estás seguro de continuar?</b>',
       icon: 'warning',
-      input: 'password',
-      inputPlaceholder: 'Contraseña de seguridad',
       showCancelButton: true,
       confirmButtonText: 'Sí, Eliminar Todo',
-      confirmButtonColor: '#ef4444',
-      preConfirm: (password) => {
-        if (password !== '2026jaujaucrema') {
-          Swal.showValidationMessage('Contraseña incorrecta. Acceso denegado.');
-        }
-      }
+      confirmButtonColor: '#ef4444'
     })
     
     if (!result.isConfirmed) return
@@ -341,14 +335,13 @@ export default function AppPollada() {
   }
 
 
-  // --- CÁLCULOS GLOBALES (SE MUEVEN ARRIBA PARA USARLOS EN LA MATRIZ Y LISTA) ---
+  // --- CÁLCULOS GLOBALES ---
   const tarjetasVendidas = tarjetas.filter(t => t.estado_pago !== 'libre');
   const recaudadoReal = tarjetasVendidas.reduce((sum, t) => sum + Number(t.monto_pagado || 0), 0);
   const totalmentePagados = tarjetasVendidas.filter(t => t.estado_pago === 'pagado').length;
   const parcialesPagados = tarjetasVendidas.filter(t => t.estado_pago === 'parcial').length;
   const entregadosCount = tarjetas.filter(t => t.estado_entrega === 'entregado').length;
 
-  // ESTE AGRUPADOR ES LA CLAVE PARA SABER EL ESTADO GLOBAL DE CADA CLIENTE
   const pedidosAgrupados = tarjetasVendidas.reduce((acc, t) => {
     const nombre = t.cliente_nombre || 'Desconocido';
     if (!acc[nombre]) acc[nombre] = { cliente_nombre: nombre, tarjetas: [], monto_pagado: 0, costo_total: 0, entregadas: 0 };
@@ -369,7 +362,6 @@ export default function AppPollada() {
   async function entregarSeleccionadas() {
     const selectedCardsObjects = tarjetas.filter(t => seleccionadas.includes(t.numero));
     
-    // Verificamos si alguna de las tarjetas seleccionadas pertenece a un cliente con deuda global
     const owesMoney = selectedCardsObjects.some(t => {
        const cliente = pedidosAgrupados[t.cliente_nombre];
        return cliente && cliente.estado_pago === 'parcial';
@@ -411,7 +403,6 @@ export default function AppPollada() {
       await supabase.from('tarjetas')
         .update({ estado_entrega: 'entregado' })
         .in('numero', clienteObj.tarjetas);
-        // Ya no filtramos por eq('estado_pago', 'pagado'), entregamos TODO.
         
       setSeleccionadas([]);
       await cargarTarjetas();
@@ -574,7 +565,6 @@ export default function AppPollada() {
                        </td>
                        <td className="px-5 py-4 flex items-center justify-center gap-2">
                           
-                          {/* BOTON ENTREGAR TODO INTELIGENTE: Cambia de color si hay deuda */}
                           {c.entregadas < c.tarjetas.length && (
                              <button 
                                 onClick={() => entregarTodoCliente(c)} 
@@ -613,13 +603,11 @@ export default function AppPollada() {
   const countTotalSelected = selectedCardsObjects.length;
   
   const countLibre = selectedCardsObjects.filter(t => t.estado_pago === 'libre').length;
-  // Ya no filtramos solo 'pagado' para entregar, permitimos cualquier 'vendida' que esté 'pendiente'
   const countPendientes = selectedCardsObjects.filter(t => t.estado_pago !== 'libre' && t.estado_entrega === 'pendiente').length;
 
   const canOrder = countLibre === countTotalSelected && countTotalSelected > 0;
   const canDeliver = countPendientes === countTotalSelected && countTotalSelected > 0;
   
-  // Verificamos si en la selección hay alguna tarjeta de un cliente deudor
   const selectedHasDebt = selectedCardsObjects.some(t => {
      const c = pedidosAgrupados[t.cliente_nombre];
      return c && c.estado_pago === 'parcial';
@@ -664,7 +652,6 @@ export default function AppPollada() {
             const isSelected = seleccionadas.includes(t.numero)
             let styles = 'bg-[#0f1115] border-[#2a2d36] text-gray-400 hover:border-[#00e5ff]' 
             
-            // PSICOLOGÍA DE INTERFAZ: Usamos el estado GLOBAL del cliente para pintar las tarjetas de la matriz
             if (t.estado_pago !== 'libre') {
                const clienteInfo = pedidosAgrupados[t.cliente_nombre];
                const estadoParaPintar = clienteInfo ? clienteInfo.estado_pago : t.estado_pago;
