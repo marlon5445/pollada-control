@@ -66,11 +66,11 @@ export default function AppPollada() {
   }
 
   async function verificarConfiguracion(userId) {
-    const { data } = await supabase.from('configuracion_evento').select('*').eq('user_id', userId).single()
+    const { data } = await supabase.from('eventos').select('*').eq('user_id', userId).single()
     if (data && data.configurado) {
       setConfigurado(true)
       setPrecio(data.precio_tarjeta)
-      setView('dashboard') // Cambiado directamente a dashboard si ya tiene evento
+      setView('dashboard')
       cargarTarjetas(data.id)
     } else {
       setConfigurado(false)
@@ -81,8 +81,8 @@ export default function AppPollada() {
   async function cargarTarjetas(eventoId) {
     let queryId = eventoId;
     if (!queryId && user) {
-      const { data: conf } = await supabase.from('configuracion_evento').select('id').eq('user_id', user.id).single();
-      if (conf) queryId = conf.id;
+      const { data: ev } = await supabase.from('eventos').select('id').eq('user_id', user.id).single();
+      if (ev) queryId = ev.id;
     }
     if (!queryId) return;
 
@@ -119,10 +119,9 @@ export default function AppPollada() {
 
     saasSwal.fire({ title: 'Generando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
     
-    // Limpiamos eventos anteriores del usuario para evitar duplicidad
-    await supabase.from('configuracion_evento').delete().eq('user_id', user.id)
+    await supabase.from('eventos').delete().eq('user_id', user.id)
 
-    const { data: eventoData, error: errConf } = await supabase.from('configuracion_evento').insert({ 
+    const { data: eventoData, error: errConf } = await supabase.from('eventos').insert({ 
       user_id: user.id, 
       nombre_evento: 'Gran Pollada', 
       total_tarjetas: totalGenerado, 
@@ -161,10 +160,10 @@ export default function AppPollada() {
     
     saasSwal.fire({ title: 'Borrando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
     
-    const { data: conf } = await supabase.from('configuracion_evento').select('id').eq('user_id', user.id).single()
-    if (conf) {
-      await supabase.from('tarjetas').delete().eq('evento_id', conf.id)
-      await supabase.from('configuracion_evento').delete().eq('id', conf.id)
+    const { data: ev } = await supabase.from('eventos').select('id').eq('user_id', user.id).single()
+    if (ev) {
+      await supabase.from('tarjetas').delete().eq('evento_id', ev.id)
+      await supabase.from('eventos').delete().eq('id', ev.id)
     }
 
     setConfigurado(false)
@@ -367,7 +366,7 @@ export default function AppPollada() {
         .eq('id', t.id);
     }
     
-    setSeleccionadas([]);
+    setSeleccionadas();
     cargarTarjetas();
   }
 
@@ -388,7 +387,7 @@ export default function AppPollada() {
       .update({ cliente_nombre: null, estado_pago: 'libre', monto_pagado: 0, historial_pagos: [], estado_entrega: 'pendiente' })
       .in('id', idsToReset);
       
-    setSeleccionadas([]);
+    setSeleccionadas();
     cargarTarjetas();
   }
 
@@ -790,4 +789,4 @@ export default function AppPollada() {
       )}
     </div>
   )
-} 
+}
