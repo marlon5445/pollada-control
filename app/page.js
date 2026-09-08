@@ -70,7 +70,7 @@ export default function AppPollada() {
     if (data && data.configurado) {
       setConfigurado(true)
       setPrecio(data.precio_tarjeta)
-      setView('landing')
+      setView('dashboard') // Cambiado directamente a dashboard si ya tiene evento
       cargarTarjetas(data.id)
     } else {
       setConfigurado(false)
@@ -80,7 +80,7 @@ export default function AppPollada() {
 
   async function cargarTarjetas(eventoId) {
     let queryId = eventoId;
-    if (!queryId) {
+    if (!queryId && user) {
       const { data: conf } = await supabase.from('configuracion_evento').select('id').eq('user_id', user.id).single();
       if (conf) queryId = conf.id;
     }
@@ -119,21 +119,22 @@ export default function AppPollada() {
 
     saasSwal.fire({ title: 'Generando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
     
-    // Guardamos la configuración ligada al usuario actual
-    const { data: eventoData, error: errConf } = await supabase.from('configuracion_evento').upsert({ 
+    // Limpiamos eventos anteriores del usuario para evitar duplicidad
+    await supabase.from('configuracion_evento').delete().eq('user_id', user.id)
+
+    const { data: eventoData, error: errConf } = await supabase.from('configuracion_evento').insert({ 
       user_id: user.id, 
       nombre_evento: 'Gran Pollada', 
       total_tarjetas: totalGenerado, 
       precio_tarjeta: precio, 
       configurado: true 
-    }, { onConflict: 'user_id' }).select().single()
+    }).select().single()
 
     if (errConf) {
       saasSwal.fire('Error', 'No se pudo guardar la configuración', 'error')
       return
     }
 
-    // Asignamos el evento_id correcto a cada tarjeta
     const tarjetasConId = tarjetasArray.map(t => ({
       ...t,
       evento_id: eventoData.id
@@ -366,7 +367,7 @@ export default function AppPollada() {
         .eq('id', t.id);
     }
     
-    setSeleccionadas();
+    setSeleccionadas([]);
     cargarTarjetas();
   }
 
@@ -789,4 +790,4 @@ export default function AppPollada() {
       )}
     </div>
   )
-}
+} 
