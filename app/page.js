@@ -42,9 +42,9 @@ export default function AppPollada() {
 
   async function verificarSesion() {
     const { data: { session } } = await supabase.auth.getSession()
-    if (session) {
+    if (session?.user) {
       setUser(session.user)
-      verificarConfiguracion(session.user.id)
+      await verificarConfiguracion(session.user.id)
     } else {
       setUser(null)
       setView('landing')
@@ -66,12 +66,12 @@ export default function AppPollada() {
   }
 
   async function verificarConfiguracion(userId) {
-    const { data } = await supabase.from('eventos').select('*').eq('user_id', userId).single()
+    const { data } = await supabase.from('eventos').select('*').eq('user_id', userId).maybeSingle()
     if (data && data.configurado) {
       setConfigurado(true)
-      setPrecio(data.precio_tarjeta)
+      setPrecio(Number(data.precio_tarjeta) || 15)
+      await cargarTarjetas(data.id)
       setView('dashboard')
-      cargarTarjetas(data.id)
     } else {
       setConfigurado(false)
       setView('landing')
@@ -80,8 +80,8 @@ export default function AppPollada() {
 
   async function cargarTarjetas(eventoId) {
     let queryId = eventoId;
-    if (!queryId && user) {
-      const { data: ev } = await supabase.from('eventos').select('id').eq('user_id', user.id).single();
+    if (!queryId && user?.id) {
+      const { data: ev } = await supabase.from('eventos').select('id').eq('user_id', user.id).maybeSingle();
       if (ev) queryId = ev.id;
     }
     if (!queryId) return;
@@ -97,6 +97,8 @@ export default function AppPollada() {
 
   async function generarEvento(e) {
     e.preventDefault()
+    if (!user) return
+
     let tarjetasArray = []
     let totalGenerado = 0
 
@@ -156,11 +158,11 @@ export default function AppPollada() {
       confirmButtonColor: '#ef4444'
     })
     
-    if (!result.isConfirmed) return
+    if (!result.isConfirmed || !user?.id) return
     
     saasSwal.fire({ title: 'Borrando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
     
-    const { data: ev } = await supabase.from('eventos').select('id').eq('user_id', user.id).single()
+    const { data: ev } = await supabase.from('eventos').select('id').eq('user_id', user.id).maybeSingle()
     if (ev) {
       await supabase.from('tarjetas').delete().eq('evento_id', ev.id)
       await supabase.from('eventos').delete().eq('id', ev.id)
@@ -298,7 +300,8 @@ export default function AppPollada() {
         .eq('id', t.id);
     }
     
-    setSeleccionadas([]); cargarTarjetas();
+    setSeleccionadas([]); 
+    await cargarTarjetas();
   }
 
   async function abonarDeuda(clienteObj) {
@@ -341,6 +344,7 @@ export default function AppPollada() {
     
     for (let num of clienteObj.tarjetas) {
       const t = tarjetas.find(x => x.numero === num);
+      if (!t) continue;
       let deudaTarjeta = Number((precio - Number(t.monto_pagado || 0)).toFixed(2));
       let pagoAEstaTarjeta = 0;
 
@@ -366,8 +370,8 @@ export default function AppPollada() {
         .eq('id', t.id);
     }
     
-    setSeleccionadas();
-    cargarTarjetas();
+    setSeleccionadas([]);
+    await cargarTarjetas();
   }
 
   async function anularPedido(clienteObj) {
@@ -387,15 +391,16 @@ export default function AppPollada() {
       .update({ cliente_nombre: null, estado_pago: 'libre', monto_pagado: 0, historial_pagos: [], estado_entrega: 'pendiente' })
       .in('id', idsToReset);
       
-    setSeleccionadas();
-    cargarTarjetas();
+    setSeleccionadas([]);
+    await cargarTarjetas();
   }
 
-  const tarjetasVendidas = tarjetas.filter(t => t.estado_pago !== 'libre');
+  const tarjetasSeguras = Array.isArray(tarjetas) ? tarjetas : [];
+  const tarjetasVendidas = tarjetasSeguras.filter(t => t.estado_pago !== 'libre');
   const recaudadoReal = tarjetasVendidas.reduce((sum, t) => sum + Number(t.monto_pagado || 0), 0);
   const totalmentePagados = tarjetasVendidas.filter(t => t.estado_pago === 'pagado').length;
   const parcialesPagados = tarjetasVendidas.filter(t => t.estado_pago === 'parcial').length;
-  const entregadosCount = tarjetas.filter(t => t.estado_entrega === 'entregado').length;
+  const entregadosCount = tarjetasSeguras.filter(t => t.estado_entrega === 'entregado').length;
 
   const pedidosAgrupados = tarjetasVendidas.reduce((acc, t) => {
     const nombre = t.cliente_nombre || 'Desconocido';
@@ -413,7 +418,7 @@ export default function AppPollada() {
   });
 
   async function entregarSeleccionadas() {
-    const selectedCardsObjects = tarjetas.filter(t => seleccionadas.includes(t.numero));
+    const selectedCardsObjects = tarjetasSeguras.filter(t => seleccionadas.includes(t.numero));
     
     const owesMoney = selectedCardsObjects.some(t => {
        const cliente = pedidosAgrupados[t.cliente_nombre];
@@ -435,7 +440,7 @@ export default function AppPollada() {
     const idsToDeliver = selectedCardsObjects.map(t => t.id);
     await supabase.from('tarjetas').update({ estado_entrega: 'entregado' }).in('id', idsToDeliver)
     setSeleccionadas([]);
-    cargarTarjetas();
+    await cargarTarjetas();
   }
 
   async function entregarTodoCliente(clienteObj) {
@@ -454,14 +459,13 @@ export default function AppPollada() {
     })
     
     if (result.isConfirmed) {
-      const idsToDeliver = tarjetas.filter(t => clienteObj.tarjetas.includes(t.numero)).map(t => t.id);
+      const idsToDeliver = tarjetasSeguras.filter(t => clienteObj.tarjetas.includes(t.numero)).map(t => t.id);
       await supabase.from('tarjetas')
         .update({ estado_entrega: 'entregado' })
         .in('id', idsToDeliver);
         
       setSeleccionadas([]);
       await cargarTarjetas();
-      setView('dashboard');
     }
   }
 
@@ -662,7 +666,7 @@ export default function AppPollada() {
     )
   }
 
-  const selectedCardsObjects = tarjetas.filter(t => seleccionadas.includes(t.numero));
+  const selectedCardsObjects = tarjetasSeguras.filter(t => seleccionadas.includes(t.numero));
   const countTotalSelected = selectedCardsObjects.length;
   const countLibre = selectedCardsObjects.filter(t => t.estado_pago === 'libre').length;
   const countPendientes = selectedCardsObjects.filter(t => t.estado_pago !== 'libre' && t.estado_entrega === 'pendiente').length;
@@ -708,7 +712,7 @@ export default function AppPollada() {
         </div>
         
         <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2 md:gap-3">
-          {tarjetas.map(t => {
+          {tarjetasSeguras.map(t => {
             const isSelected = seleccionadas.includes(t.numero)
             let styles = 'bg-[#0f1115] border-[#2a2d36] text-gray-400 hover:border-[#00e5ff]' 
             
