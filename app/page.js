@@ -5,6 +5,9 @@ import Image from 'next/image'
 import Swal from 'sweetalert2'
 import { Trash2, ArrowRight, Settings, CheckCircle2, Ticket, Users, LayoutGrid, CreditCard, XCircle, MousePointerSquareDashed, LogOut } from 'lucide-react'
 
+// TU ID DE CLIENTE DE GOOGLE
+const GOOGLE_CLIENT_ID = '279639822100-rfeisbt5liojkk4rr1aa4cquvqrseu1g.apps.googleusercontent.com'
+
 export default function AppPollada() {
   const [user, setUser] = useState(null)
   const [view, setView] = useState('loading') 
@@ -36,9 +39,53 @@ export default function AppPollada() {
     buttonsStyling: false
   })
 
+  // 1. Verificación inicial de sesión normal
   useEffect(() => {
     verificarSesion()
   }, [])
+
+  // 2. MAGIA DE GOOGLE ONE TAP
+  useEffect(() => {
+    if (view === 'landing' && !user) {
+      const script = document.createElement('script')
+      script.src = 'https://accounts.google.com/gsi/client'
+      script.async = true
+      script.defer = true
+      script.onload = () => {
+        if (window.google) {
+          window.google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: handleGoogleOneTap,
+            auto_select: true, // Intenta loguear automático si solo hay 1 cuenta
+            cancel_on_tap_outside: false
+          })
+          window.google.accounts.id.prompt() // Dispara la ventanita
+        }
+      }
+      document.body.appendChild(script)
+
+      return () => {
+        if (document.body.contains(script)) {
+          document.body.removeChild(script)
+        }
+      }
+    }
+  }, [view, user])
+
+  // Procesador silencioso del login de One Tap
+  async function handleGoogleOneTap(response) {
+    try {
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: response.credential,
+      })
+      if (error) throw error
+      await verificarSesion()
+    } catch (error) {
+      console.error(error)
+      saasSwal.fire('Aviso', 'Fallo el inicio automático. Usa el botón principal.', 'warning')
+    }
+  }
 
   async function verificarSesion() {
     const { data: { session } } = await supabase.auth.getSession()
@@ -51,6 +98,7 @@ export default function AppPollada() {
     }
   }
 
+  // Login tradicional (Botón de respaldo)
   async function iniciarSesionGoogle() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
