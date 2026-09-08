@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import Image from 'next/image'
 import Swal from 'sweetalert2'
-import { PlusCircle, Trash2, ArrowRight, Settings, CheckCircle2, Ticket, Users, LayoutGrid, CreditCard, XCircle, MousePointerSquareDashed, LogOut } from 'lucide-react'
+import { Trash2, ArrowRight, Settings, CheckCircle2, Ticket, Users, LayoutGrid, CreditCard, XCircle, MousePointerSquareDashed, LogOut } from 'lucide-react'
 
 export default function AppPollada() {
   const [user, setUser] = useState(null)
@@ -44,7 +44,7 @@ export default function AppPollada() {
     const { data: { session } } = await supabase.auth.getSession()
     if (session) {
       setUser(session.user)
-      verificarConfiguracion()
+      verificarConfiguracion(session.user.id)
     } else {
       setUser(null)
       setView('landing')
@@ -65,21 +65,28 @@ export default function AppPollada() {
     setView('landing')
   }
 
-  async function verificarConfiguracion() {
-    const { data } = await supabase.from('configuracion_evento').select('*').single()
+  async function verificarConfiguracion(userId) {
+    const { data } = await supabase.from('configuracion_evento').select('*').eq('user_id', userId).single()
     if (data && data.configurado) {
       setConfigurado(true)
       setPrecio(data.precio_tarjeta)
       setView('landing')
-      cargarTarjetas()
+      cargarTarjetas(data.id)
     } else {
       setConfigurado(false)
       setView('landing')
     }
   }
 
-  async function cargarTarjetas() {
-    const { data } = await supabase.from('tarjetas').select('*')
+  async function cargarTarjetas(eventoId) {
+    let queryId = eventoId;
+    if (!queryId) {
+      const { data: conf } = await supabase.from('configuracion_evento').select('id').eq('user_id', user.id).single();
+      if (conf) queryId = conf.id;
+    }
+    if (!queryId) return;
+
+    const { data } = await supabase.from('tarjetas').select('*').eq('evento_id', queryId)
     if (data) {
       const ordenadas = data.sort((a, b) => parseInt(a.numero, 10) - parseInt(b.numero, 10))
       setTarjetas(ordenadas)
@@ -100,20 +107,40 @@ export default function AppPollada() {
       if (isNaN(startNum) || isNaN(endNum) || startNum > endNum) return saasSwal.fire('Error', 'El rango no es válido.', 'error')
 
       for (let i = startNum; i <= endNum; i++) {
-        tarjetasArray.push({ numero: i.toString().padStart(padLen, '0'), historial_pagos: [] })
+        tarjetasArray.push({ numero: i.toString().padStart(padLen, '0'), historial_pagos: [], estado_entrega: 'pendiente', estado_pago: 'libre' })
       }
       totalGenerado = tarjetasArray.length
     } else {
       totalGenerado = cantidadNormal
       for (let i = 1; i <= totalGenerado; i++) {
-        tarjetasArray.push({ numero: i.toString(), historial_pagos: [] })
+        tarjetasArray.push({ numero: i.toString(), historial_pagos: [], estado_entrega: 'pendiente', estado_pago: 'libre' })
       }
     }
 
     saasSwal.fire({ title: 'Generando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
-    await supabase.from('configuracion_evento').upsert({ id: 1, nombre_evento: 'Gran Pollada', total_tarjetas: totalGenerado, precio_tarjeta: precio, configurado: true })
-    await supabase.from('tarjetas').insert(tarjetasArray)
-    await cargarTarjetas()
+    
+    // Guardamos la configuración ligada al usuario actual
+    const { data: eventoData, error: errConf } = await supabase.from('configuracion_evento').upsert({ 
+      user_id: user.id, 
+      nombre_evento: 'Gran Pollada', 
+      total_tarjetas: totalGenerado, 
+      precio_tarjeta: precio, 
+      configurado: true 
+    }, { onConflict: 'user_id' }).select().single()
+
+    if (errConf) {
+      saasSwal.fire('Error', 'No se pudo guardar la configuración', 'error')
+      return
+    }
+
+    // Asignamos el evento_id correcto a cada tarjeta
+    const tarjetasConId = tarjetasArray.map(t => ({
+      ...t,
+      evento_id: eventoData.id
+    }))
+
+    await supabase.from('tarjetas').insert(tarjetasConId)
+    await cargarTarjetas(eventoData.id)
     setConfigurado(true)
     Swal.close()
     setView('dashboard')
@@ -132,8 +159,13 @@ export default function AppPollada() {
     if (!result.isConfirmed) return
     
     saasSwal.fire({ title: 'Borrando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
-    await supabase.from('tarjetas').delete().neq('numero', 'null_placeholder')
-    await supabase.from('configuracion_evento').update({ configurado: false }).eq('id', 1)
+    
+    const { data: conf } = await supabase.from('configuracion_evento').select('id').eq('user_id', user.id).single()
+    if (conf) {
+      await supabase.from('tarjetas').delete().eq('evento_id', conf.id)
+      await supabase.from('configuracion_evento').delete().eq('id', conf.id)
+    }
+
     setConfigurado(false)
     setTarjetas([])
     setSeleccionadas([])
@@ -263,7 +295,7 @@ export default function AppPollada() {
           monto_pagado: nuevoMontoPagado, 
           historial_pagos: nuevoHistorial 
         })
-        .eq('numero', t.numero);
+        .eq('id', t.id);
     }
     
     setSeleccionadas([]); cargarTarjetas();
@@ -331,10 +363,10 @@ export default function AppPollada() {
 
       await supabase.from('tarjetas')
         .update({ estado_pago: nuevoEstado, monto_pagado: nuevoMontoPagado, historial_pagos: nuevoHistorial })
-        .eq('numero', t.numero);
+        .eq('id', t.id);
     }
     
-    setSeleccionadas([]);
+    setSeleccionadas();
     cargarTarjetas();
   }
 
@@ -349,9 +381,11 @@ export default function AppPollada() {
     })
     if (!result.isConfirmed) return
 
+    const idsToReset = tarjetas.filter(t => clienteObj.tarjetas.includes(t.numero)).map(t => t.id);
+
     await supabase.from('tarjetas')
       .update({ cliente_nombre: null, estado_pago: 'libre', monto_pagado: 0, historial_pagos: [], estado_entrega: 'pendiente' })
-      .in('numero', clienteObj.tarjetas);
+      .in('id', idsToReset);
       
     setSeleccionadas([]);
     cargarTarjetas();
@@ -398,7 +432,8 @@ export default function AppPollada() {
        if (!result.isConfirmed) return;
     }
 
-    await supabase.from('tarjetas').update({ estado_entrega: 'entregado' }).in('numero', seleccionadas)
+    const idsToDeliver = selectedCardsObjects.map(t => t.id);
+    await supabase.from('tarjetas').update({ estado_entrega: 'entregado' }).in('id', idsToDeliver)
     setSeleccionadas([]);
     cargarTarjetas();
   }
@@ -419,9 +454,10 @@ export default function AppPollada() {
     })
     
     if (result.isConfirmed) {
+      const idsToDeliver = tarjetas.filter(t => clienteObj.tarjetas.includes(t.numero)).map(t => t.id);
       await supabase.from('tarjetas')
         .update({ estado_entrega: 'entregado' })
-        .in('numero', clienteObj.tarjetas);
+        .in('id', idsToDeliver);
         
       setSeleccionadas([]);
       await cargarTarjetas();
@@ -431,7 +467,6 @@ export default function AppPollada() {
 
   if (view === 'loading') return <div className="min-h-screen bg-[#0f1115] flex items-center justify-center text-white">Cargando...</div>
 
-  // NAVBAR ORIGINAL CON TU LOGO BRILLANTE + BOTÓN DE GOOGLE / SALIR
   const Navbar = () => (
     <nav className="flex items-center justify-between bg-[#13151a] border border-[#2a2d36] rounded-2xl px-4 md:px-6 py-2.5 md:py-3 shrink-0 mb-4 md:mb-6">
       <div className="flex items-center gap-3">
