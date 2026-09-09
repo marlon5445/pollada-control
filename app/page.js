@@ -3,10 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import Image from 'next/image'
 import Swal from 'sweetalert2'
-import { Trash2, ArrowRight, Settings, CheckCircle2, Ticket, Users, LayoutGrid, CreditCard, XCircle, MousePointerSquareDashed, LogOut, Mail } from 'lucide-react'
-
-// TU ID DE CLIENTE DE GOOGLE
-const GOOGLE_CLIENT_ID = '279639822100-rfeisbt5liojkk4rr1aa4cquvqrseu1g.apps.googleusercontent.com'
+import { Trash2, ArrowRight, Settings, CheckCircle2, Ticket, Users, LayoutGrid, CreditCard, XCircle, MousePointerSquareDashed, LogOut, Mail, KeyRound } from 'lucide-react'
 
 export default function AppPollada() {
   const [user, setUser] = useState(null)
@@ -25,10 +22,11 @@ export default function AppPollada() {
   const [rangoSelInicio, setRangoSelInicio] = useState('')
   const [rangoSelFin, setRangoSelFin] = useState('')
 
-  // Estados para el Magic Link
+  // ESTADOS DEL LOGIN POR PIN (Sin Google)
   const [email, setEmail] = useState('')
-  const [enviandoLink, setEnviandoLink] = useState(false)
-  const [mostrarEmail, setMostrarEmail] = useState(false) // Totalmente oculto hasta que el usuario quiera
+  const [codigoOtp, setCodigoOtp] = useState('')
+  const [pasoLogin, setPasoLogin] = useState('correo') // 'correo' o 'codigo'
+  const [cargandoAuth, setCargandoAuth] = useState(false)
 
   const saasSwal = Swal.mixin({
     background: '#1a1d24',
@@ -48,52 +46,6 @@ export default function AppPollada() {
     verificarSesion()
   }, [])
 
-  // MAGIA DE GOOGLE ONE TAP (Sin callbacks que hagan saltar la UI)
-  useEffect(() => {
-    if (view === 'landing' && !user) {
-      const script = document.createElement('script')
-      script.src = 'https://accounts.google.com/gsi/client'
-      script.async = true
-      script.defer = true
-      
-      script.onload = () => {
-        if (window.google) {
-          window.google.accounts.id.initialize({
-            client_id: GOOGLE_CLIENT_ID,
-            callback: handleGoogleOneTap,
-            auto_select: true, 
-            cancel_on_tap_outside: false
-          })
-          
-          // Solo lanzamos el prompt visual, sin forzar cambios en nuestra interfaz web
-          window.google.accounts.id.prompt()
-        }
-      }
-      
-      document.body.appendChild(script)
-
-      return () => {
-        if (document.body.contains(script)) {
-          document.body.removeChild(script)
-        }
-      }
-    }
-  }, [view, user])
-
-  async function handleGoogleOneTap(response) {
-    try {
-      const { data, error } = await supabase.auth.signInWithIdToken({
-        provider: 'google',
-        token: response.credential,
-      })
-      if (error) throw error
-      await verificarSesion()
-    } catch (error) {
-      console.error(error)
-      saasSwal.fire('Aviso', 'Fallo el inicio automático. Usa el botón superior.', 'warning')
-    }
-  }
-
   async function verificarSesion() {
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.user) {
@@ -105,35 +57,45 @@ export default function AppPollada() {
     }
   }
 
-  async function iniciarSesionGoogle() {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin }
-    })
-  }
-
-  async function enviarMagicLink(e) {
+  // 1. PIDE EL CÓDIGO AL CORREO
+  async function pedirCodigo(e) {
     e.preventDefault()
     if(!email) return
-    setEnviandoLink(true)
+    setCargandoAuth(true)
     
     const { error } = await supabase.auth.signInWithOtp({
       email: email,
-      options: { emailRedirectTo: window.location.origin }
     })
     
-    setEnviandoLink(false)
+    setCargandoAuth(false)
     
     if (error) {
-      saasSwal.fire('Error', 'No pudimos enviar el enlace. Intenta de nuevo.', 'error')
+      saasSwal.fire('Error', 'No pudimos enviar el código. Revisa que el correo sea válido.', 'error')
     } else {
-      saasSwal.fire({
-        title: '¡Revisa tu correo!',
-        html: `Te hemos enviado un enlace seguro a <b>${email}</b>.<br/><br/>Haz clic en el botón del correo para entrar directo a tu panel sin contraseñas (revisa la carpeta de SPAM por si acaso).`,
-        icon: 'success'
-      })
-      setEmail('')
-      setMostrarEmail(false) // Ocultamos la caja de nuevo tras el envío
+      setPasoLogin('codigo')
+    }
+  }
+
+  // 2. VERIFICA EL PIN Y DEJA LA SESIÓN GUARDADA
+  async function verificarCodigoOtp(e) {
+    e.preventDefault()
+    if(!codigoOtp) return
+    setCargandoAuth(true)
+
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: email,
+      token: codigoOtp,
+      type: 'email'
+    })
+
+    setCargandoAuth(false)
+
+    if (error) {
+      saasSwal.fire('Código Incorrecto', 'El PIN no es válido o ya expiró. Intenta de nuevo.', 'error')
+    } else {
+      setPasoLogin('correo')
+      setCodigoOtp('')
+      await verificarSesion() // Esto recarga la vista y lo manda al dashboard
     }
   }
 
@@ -573,13 +535,10 @@ export default function AppPollada() {
             <Trash2 size={18} /> <span className="inline">Borrar Evento</span>
           </button>
         )}
-        {user ? (
+        {/* Como quitamos Google, el botón de la cabecera desaparece si no hay usuario logueado */}
+        {user && (
           <button onClick={cerrarSesion} className="bg-red-500/10 text-red-500 border border-red-500/20 px-3 py-2 rounded-lg text-sm flex items-center gap-1.5 hover:bg-red-500/25 transition-colors">
             <LogOut size={16} /> Salir
-          </button>
-        ) : (
-          <button onClick={iniciarSesionGoogle} className="bg-white text-black font-bold px-4 py-2 rounded-lg text-sm hover:bg-gray-200 transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(255,255,255,0.2)]">
-            Iniciar Sesión con Google
           </button>
         )}
       </div>
@@ -600,42 +559,56 @@ export default function AppPollada() {
           
           {!user ? (
             <div className="mt-4 w-full max-w-sm flex flex-col items-center">
-              
-              {!mostrarEmail ? (
-                <button 
-                  onClick={() => setMostrarEmail(true)} 
-                  className="text-gray-400 hover:text-[#00e5ff] text-sm underline transition-colors"
-                >
-                  O acceder con mi correo electrónico
-                </button>
-              ) : (
-                <form onSubmit={enviarMagicLink} className="flex flex-col w-full gap-3 animate-[fadeIn_0.3s_ease-out]">
-                  <div className="text-left bg-[#1a1d24] border border-[#2a2d36] p-4 rounded-xl shadow-lg relative">
-                     <button type="button" onClick={() => setMostrarEmail(false)} className="absolute top-2 right-3 text-gray-500 hover:text-white text-lg">×</button>
-                     <p className="text-xs text-gray-400 mb-3 pr-4 leading-relaxed">
-                       Ingresa tu correo para acceder sin contraseñas. <br/><br/><b>Nota:</b> Si usas otro dispositivo más adelante, asegúrate de colocar este mismo correo.
+              {pasoLogin === 'correo' ? (
+                <form onSubmit={pedirCodigo} className="flex flex-col w-full gap-3 animate-[fadeIn_0.3s_ease-out]">
+                  <div className="text-left bg-[#1a1d24] border border-[#2a2d36] p-5 rounded-2xl shadow-xl">
+                     <h3 className="text-white font-bold text-lg mb-2 flex items-center gap-2"><Mail size={18} className="text-[#00e5ff]"/> Acceso Seguro</h3>
+                     <p className="text-sm text-gray-400 mb-4 leading-relaxed">
+                       Ingresa tu correo para recibir un <b>Código PIN de 6 dígitos</b> y mantener tu sesión activa en este dispositivo.
                      </p>
                      <input 
                        type="email" 
-                       placeholder="ejemplo@correo.com" 
+                       placeholder="tu@correo.com" 
                        value={email}
                        onChange={(e) => setEmail(e.target.value)}
-                       className="w-full bg-[#0f1115] border border-[#2a2d36] text-white text-sm rounded-lg p-3 outline-none focus:border-[#00e5ff] mb-3"
+                       className="w-full bg-[#0f1115] border border-[#2a2d36] text-white text-base rounded-xl p-3.5 outline-none focus:border-[#00e5ff] mb-4 transition-colors"
                        required
                      />
-                     <button type="submit" disabled={enviandoLink} className="w-full bg-[#2a2d36] hover:bg-[#363a45] text-white text-sm font-bold py-2.5 rounded-lg transition-colors border border-[#363a45] flex items-center justify-center gap-2">
-                       {enviandoLink ? 'Enviando...' : <><Mail size={16}/> Enviarme enlace de acceso</>}
+                     <button type="submit" disabled={cargandoAuth} className="w-full bg-gradient-to-r from-[#ff2e7e] to-[#e0206a] hover:opacity-90 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,46,126,0.3)]">
+                       {cargandoAuth ? 'Enviando...' : 'Obtener mi PIN'}
+                     </button>
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={verificarCodigoOtp} className="flex flex-col w-full gap-3 animate-[fadeIn_0.3s_ease-out]">
+                  <div className="text-left bg-[#1a1d24] border border-[#2a2d36] p-5 rounded-2xl shadow-xl">
+                     <button type="button" onClick={() => setPasoLogin('correo')} className="text-[#00e5ff] hover:text-white text-sm underline mb-3 inline-block">← Cambiar correo</button>
+                     <h3 className="text-white font-bold text-lg mb-2">Ingresa tu PIN</h3>
+                     <p className="text-sm text-gray-400 mb-4 leading-relaxed">
+                       Hemos enviado un código a <b>{email}</b>. Revisa tu bandeja y pégalo aquí.
+                     </p>
+                     <input 
+                       type="text" 
+                       placeholder="123456" 
+                       maxLength={6}
+                       value={codigoOtp}
+                       onChange={(e) => setCodigoOtp(e.target.value.replace(/[^0-9]/g, ''))} // Solo números
+                       className="w-full bg-[#0f1115] border border-[#00e5ff] text-[#00e5ff] text-center text-3xl tracking-[0.4em] rounded-xl p-4 outline-none focus:border-white mb-4 font-mono font-bold shadow-[0_0_15px_rgba(0,229,255,0.1)]"
+                       required
+                     />
+                     <button type="submit" disabled={cargandoAuth || codigoOtp.length < 6} className="w-full bg-gradient-to-r from-[#00e5ff] to-[#00b2cc] text-black font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,229,255,0.3)]">
+                       {cargandoAuth ? 'Verificando...' : <><KeyRound size={18}/> Entrar al Panel</>}
                      </button>
                   </div>
                 </form>
               )}
             </div>
           ) : configurado ? (
-            <button onClick={() => setView('dashboard')} className="bg-gradient-to-r from-[#00e5ff] to-[#00b2cc] text-black font-bold text-base md:text-lg py-2.5 px-8 md:px-10 rounded-full flex items-center gap-3 hover:scale-105 transition-transform shadow-[0_0_30px_rgba(0,229,255,0.3)]">
+            <button onClick={() => setView('dashboard')} className="bg-gradient-to-r from-[#00e5ff] to-[#00b2cc] text-black font-bold text-base md:text-lg py-2.5 px-8 md:px-10 rounded-full flex items-center gap-3 hover:scale-105 transition-transform shadow-[0_0_30px_rgba(0,229,255,0.3)] mt-4">
               Ir al Panel de Control <ArrowRight />
             </button>
           ) : (
-            <button onClick={() => setView('config')} className="bg-gradient-to-r from-[#ff2e7e] to-[#e0206a] text-white font-bold text-base md:text-lg py-2.5 px-8 md:px-10 rounded-full flex items-center gap-3 hover:scale-105 transition-transform shadow-[0_0_30px_rgba(255,46,126,0.3)]">
+            <button onClick={() => setView('config')} className="bg-gradient-to-r from-[#ff2e7e] to-[#e0206a] text-white font-bold text-base md:text-lg py-2.5 px-8 md:px-10 rounded-full flex items-center gap-3 hover:scale-105 transition-transform shadow-[0_0_30px_rgba(255,46,126,0.3)] mt-4">
               Comenzar Evento Ahora <ArrowRight />
             </button>
           )}
