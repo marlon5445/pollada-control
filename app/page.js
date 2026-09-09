@@ -27,6 +27,7 @@ export default function AppPollada() {
   const [codigoOtp, setCodigoOtp] = useState('')
   const [pasoLogin, setPasoLogin] = useState('correo') // 'correo' o 'codigo'
   const [cargandoAuth, setCargandoAuth] = useState(false)
+  const [tiempoEspera, setTiempoEspera] = useState(0)
 
   const saasSwal = Swal.mixin({
     background: '#1a1d24',
@@ -46,6 +47,15 @@ export default function AppPollada() {
     verificarSesion()
   }, [])
 
+  // Temporizador para controlar el tiempo de espera al reenviar PIN
+  useEffect(() => {
+    let timer;
+    if (tiempoEspera > 0) {
+      timer = setInterval(() => setTiempoEspera(prev => prev - 1), 1000)
+    }
+    return () => clearInterval(timer)
+  }, [tiempoEspera])
+
   async function verificarSesion() {
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.user) {
@@ -57,22 +67,20 @@ export default function AppPollada() {
     }
   }
 
-  // 1. PIDE EL CÓDIGO DINÁMICO AL CORREO
+  // 1. PIDE O REENVÍA EL CÓDIGO DINÁMICO AL CORREO
   async function pedirCodigo(e) {
-    e.preventDefault()
-    if(!email) return
+    if (e) e.preventDefault()
+    if (!email) return
     setCargandoAuth(true)
     
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email,
-    })
-    
+    const { error } = await supabase.auth.signInWithOtp({ email })
     setCargandoAuth(false)
     
     if (error) {
-      saasSwal.fire('Error', 'No pudimos enviar el código. Revisa que el correo sea válido.', 'error')
+      saasSwal.fire('Atención', 'Espera unos segundos antes de solicitar otro PIN.', 'warning')
     } else {
       setPasoLogin('codigo')
+      setTiempoEspera(60) // 60 segundos de espera entre reenvíos
     }
   }
 
@@ -581,21 +589,41 @@ export default function AppPollada() {
               ) : (
                 <form onSubmit={verificarCodigoOtp} className="flex flex-col w-full gap-3 animate-[fadeIn_0.3s_ease-out]">
                   <div className="text-left bg-[#1a1d24] border border-[#2a2d36] p-5 rounded-2xl shadow-xl">
-                     <button type="button" onClick={() => setPasoLogin('correo')} className="text-[#00e5ff] hover:text-white text-sm underline mb-3 inline-block">← Cambiar correo</button>
-                     <h3 className="text-white font-bold text-lg mb-2">Ingresa tu PIN</h3>
-                     <p className="text-sm text-gray-400 mb-4 leading-relaxed">
-                       Hemos enviado un código a <b>{email}</b>. Revisa tu bandeja y pégalo aquí.
+                     <div className="flex justify-between items-center mb-3">
+                       <button type="button" onClick={() => setPasoLogin('correo')} className="text-gray-400 hover:text-white text-xs underline">
+                         ← Corregir correo
+                       </button>
+                       <button 
+                         type="button" 
+                         onClick={() => pedirCodigo(null)} 
+                         disabled={tiempoEspera > 0 || cargandoAuth}
+                         className="text-[#00e5ff] hover:underline text-xs font-medium disabled:text-gray-600 disabled:no-underline"
+                       >
+                         {tiempoEspera > 0 ? `Reenviar PIN en ${tiempoEspera}s` : 'Reenviar PIN'}
+                       </button>
+                     </div>
+
+                     <h3 className="text-white font-bold text-lg mb-1">Ingresa tu PIN</h3>
+                     <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+                       Enviamos el código a <b className="text-white">{email}</b>. Haz clic abajo e ingresa los 6 números.
                      </p>
+
                      <input 
                        type="text" 
-                       placeholder="123456" 
+                       placeholder="0 0 0 0 0 0" 
                        maxLength={6}
                        value={codigoOtp}
                        onChange={(e) => setCodigoOtp(e.target.value.replace(/[^0-9]/g, ''))}
-                       className="w-full bg-[#0f1115] border border-[#00e5ff] text-[#00e5ff] text-center text-3xl tracking-[0.4em] rounded-xl p-4 outline-none focus:border-white mb-4 font-mono font-bold shadow-[0_0_15px_rgba(0,229,255,0.1)]"
+                       className="w-full bg-[#0f1115] border-2 border-[#00e5ff] text-[#00e5ff] text-center text-3xl tracking-[0.3em] rounded-xl p-3.5 outline-none focus:ring-2 focus:ring-[#00e5ff] mb-4 font-mono font-bold placeholder:text-gray-700"
+                       autoFocus
                        required
                      />
-                     <button type="submit" disabled={cargandoAuth || codigoOtp.length < 6} className="w-full bg-gradient-to-r from-[#00e5ff] to-[#00b2cc] text-black font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,229,255,0.3)]">
+
+                     <button 
+                       type="submit" 
+                       disabled={cargandoAuth || codigoOtp.length < 6} 
+                       className="w-full bg-gradient-to-r from-[#00e5ff] to-[#00b2cc] text-black font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,229,255,0.2)]"
+                     >
                        {cargandoAuth ? 'Verificando...' : <><KeyRound size={18}/> Entrar al Panel</>}
                      </button>
                   </div>
