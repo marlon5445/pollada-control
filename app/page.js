@@ -47,7 +47,7 @@ export default function AppPollada() {
     verificarSesion()
   }, [])
 
-  // Temporizador para controlar el tiempo de espera al reenviar PIN
+  // Temporizador para controlar el reenvío de PIN
   useEffect(() => {
     let timer;
     if (tiempoEspera > 0) {
@@ -84,7 +84,7 @@ export default function AppPollada() {
     }
   }
 
-  // 2. VERIFICA EL PIN Y DEJA LA SESIÓN GUARDADA
+  // 2. VERIFICA EL PIN Y GUARDA SESIÓN
   async function verificarCodigoOtp(e) {
     e.preventDefault()
     if(!codigoOtp) return
@@ -691,14 +691,41 @@ export default function AppPollada() {
   }
 
   if (view === 'listado') {
+    // CÁLCULOS GENERALES PARA REPORTE EXCEL EN TIEMPO REAL
+    const totalTarjetasAsignadas = clientesArray.reduce((sum, c) => sum + c.tarjetas.length, 0);
+    const totalMontoEsperado = clientesArray.reduce((sum, c) => sum + c.costo_total, 0);
+    const totalMontoPagado = clientesArray.reduce((sum, c) => sum + c.monto_pagado, 0);
+    const totalDeudaGeneral = totalMontoEsperado - totalMontoPagado;
+
     return (
       <div className="min-h-screen bg-[#0f1115] text-white p-4 md:p-8 font-sans pb-32">
         <Navbar />
         <div className="max-w-7xl mx-auto">
+          {/* ENCABEZADO */}
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold flex items-center gap-2"><Users className="text-[#00e5ff]" /> Listado de Clientes</h2>
             <div className="bg-[#1a1d24] px-4 py-2 rounded-lg border border-[#2a2d36] text-sm">
               Grupos/Clientes: <span className="text-[#00e5ff] font-bold">{clientesArray.length}</span>
+            </div>
+          </div>
+
+          {/* TARJETAS DE RESUMEN FINANCIERO */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 md:gap-4 mb-6">
+            <div className="bg-[#1a1d24] py-3 px-4 rounded-xl border border-[#2a2d36]">
+              <p className="text-gray-400 text-xs font-bold uppercase">Tarjetas Asignadas</p>
+              <p className="text-xl font-black text-white">{totalTarjetasAsignadas} <span className="text-xs text-gray-500">platos</span></p>
+            </div>
+            <div className="bg-[#1a1d24] py-3 px-4 rounded-xl border border-[#2a2d36]">
+              <p className="text-gray-400 text-xs font-bold uppercase">Total a Cobrar</p>
+              <p className="text-xl font-black text-white">S/ {totalMontoEsperado.toFixed(2)}</p>
+            </div>
+            <div className="bg-[#1a1d24] py-3 px-4 rounded-xl border border-[#2a2d36] border-l-4 border-l-[#ccff00]">
+              <p className="text-gray-400 text-xs font-bold uppercase">Total Cancelado</p>
+              <p className="text-xl font-black text-[#ccff00]">S/ {totalMontoPagado.toFixed(2)}</p>
+            </div>
+            <div className="bg-[#1a1d24] py-3 px-4 rounded-xl border border-[#2a2d36] border-l-4 border-l-[#ff2e7e]">
+              <p className="text-gray-400 text-xs font-bold uppercase font-mono">Deuda Pendiente</p>
+              <p className="text-xl font-black text-[#ff2e7e]">S/ {totalDeudaGeneral.toFixed(2)}</p>
             </div>
           </div>
 
@@ -711,10 +738,10 @@ export default function AppPollada() {
               <table className="w-full text-sm text-left text-gray-300">
                 <thead className="text-xs uppercase bg-[#0f1115] text-gray-500 border-b border-[#2a2d36]">
                   <tr>
-                    <th className="px-5 py-4">Cliente</th>
+                    <th className="px-5 py-4">Cliente / Responsable</th>
                     <th className="px-5 py-4">Tarjetas</th>
-                    <th className="px-5 py-4">Total</th>
-                    <th className="px-5 py-4 text-[#ccff00]">Pagado</th>
+                    <th className="px-5 py-4">Total a Pagar</th>
+                    <th className="px-5 py-4 text-[#ccff00]">Cancelaron</th>
                     <th className="px-5 py-4 text-[#ff2e7e]">Debe</th>
                     <th className="px-5 py-4">Estado</th>
                     <th className="px-5 py-4 text-center">Acciones</th>
@@ -765,6 +792,20 @@ export default function AppPollada() {
                     </tr>
                   )})}
                 </tbody>
+
+                {/* FILA DE TOTALES GENERALES */}
+                <tfoot>
+                  <tr className="bg-[#0f1115] font-black text-white border-t-2 border-[#00e5ff] uppercase text-sm">
+                    <td className="px-5 py-4 text-[#00e5ff]">TOTAL GENERAL</td>
+                    <td className="px-5 py-4 text-white">{totalTarjetasAsignadas} Platos</td>
+                    <td className="px-5 py-4 text-white">S/ {totalMontoEsperado.toFixed(2)}</td>
+                    <td className="px-5 py-4 text-[#ccff00]">S/ {totalMontoPagado.toFixed(2)}</td>
+                    <td className="px-5 py-4 text-[#ff2e7e]">S/ {totalDeudaGeneral.toFixed(2)}</td>
+                    <td colSpan={2} className="px-5 py-4 text-gray-500 text-xs font-normal text-right">
+                      Calculado automáticamente
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
