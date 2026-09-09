@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import Image from 'next/image'
 import Swal from 'sweetalert2'
-import { Trash2, ArrowRight, Settings, CheckCircle2, Ticket, Users, LayoutGrid, CreditCard, XCircle, MousePointerSquareDashed, LogOut, Mail, KeyRound, Utensils, ClockHandled } from 'lucide-react'
+import { Trash2, ArrowRight, Settings, CheckCircle2, Ticket, Users, LayoutGrid, CreditCard, XCircle, MousePointerSquareDashed, LogOut, Mail, KeyRound } from 'lucide-react'
 
 export default function AppPollada() {
   const [user, setUser] = useState(null)
