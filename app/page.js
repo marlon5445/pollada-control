@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import Image from 'next/image'
 import Swal from 'sweetalert2'
-import { Trash2, ArrowRight, Settings, CheckCircle2, Ticket, Users, LayoutGrid, CreditCard, XCircle, MousePointerSquareDashed, LogOut } from 'lucide-react'
+import { Trash2, ArrowRight, Settings, CheckCircle2, Ticket, Users, LayoutGrid, CreditCard, XCircle, MousePointerSquareDashed, LogOut, Mail } from 'lucide-react'
 
 // TU ID DE CLIENTE DE GOOGLE
 const GOOGLE_CLIENT_ID = '279639822100-rfeisbt5liojkk4rr1aa4cquvqrseu1g.apps.googleusercontent.com'
@@ -24,6 +24,10 @@ export default function AppPollada() {
 
   const [rangoSelInicio, setRangoSelInicio] = useState('')
   const [rangoSelFin, setRangoSelFin] = useState('')
+
+  // Estados para el Magic Link
+  const [email, setEmail] = useState('')
+  const [enviandoLink, setEnviandoLink] = useState(false)
 
   const saasSwal = Swal.mixin({
     background: '#1a1d24',
@@ -98,12 +102,37 @@ export default function AppPollada() {
     }
   }
 
-  // Login tradicional (Botón de respaldo)
+  // Login tradicional Google
   async function iniciarSesionGoogle() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin }
     })
+  }
+
+  // Envío del Enlace Mágico por Correo
+  async function enviarMagicLink(e) {
+    e.preventDefault()
+    if(!email) return
+    setEnviandoLink(true)
+    
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email,
+      options: { emailRedirectTo: window.location.origin }
+    })
+    
+    setEnviandoLink(false)
+    
+    if (error) {
+      saasSwal.fire('Error', 'No pudimos enviar el enlace. Intenta de nuevo.', 'error')
+    } else {
+      saasSwal.fire({
+        title: '¡Revisa tu correo!',
+        html: `Te hemos enviado un enlace seguro a <b>${email}</b>.<br/><br/>Haz clic en el botón del correo para entrar directo a tu panel sin contraseñas (revisa la carpeta de SPAM por si acaso).`,
+        icon: 'success'
+      })
+      setEmail('')
+    }
   }
 
   async function cerrarSesion() {
@@ -568,9 +597,36 @@ export default function AppPollada() {
           </h1>
           
           {!user ? (
-            <button onClick={iniciarSesionGoogle} className="bg-gradient-to-r from-[#ff2e7e] to-[#e0206a] text-white font-bold text-base md:text-lg py-3 px-10 rounded-full flex items-center gap-3 hover:scale-105 transition-transform shadow-[0_0_30px_rgba(255,46,126,0.3)]">
-              Iniciar Sesión con Google <ArrowRight />
-            </button>
+            <div className="mt-4 w-full max-w-sm flex flex-col gap-5">
+              <button onClick={iniciarSesionGoogle} className="w-full bg-gradient-to-r from-[#ff2e7e] to-[#e0206a] text-white font-bold text-base md:text-lg py-3 px-6 rounded-full flex justify-center items-center gap-3 hover:scale-105 transition-transform shadow-[0_0_30px_rgba(255,46,126,0.3)]">
+                Continuar con Google <ArrowRight />
+              </button>
+
+              <div className="flex items-center gap-3 text-gray-500 text-sm">
+                <span className="flex-1 border-t border-[#2a2d36]"></span>
+                <span>O usa tu correo</span>
+                <span className="flex-1 border-t border-[#2a2d36]"></span>
+              </div>
+
+              <form onSubmit={enviarMagicLink} className="flex flex-col gap-3">
+                <div className="text-left bg-[#1a1d24] border border-[#2a2d36] p-4 rounded-xl shadow-lg">
+                   <p className="text-xs text-gray-400 mb-3 leading-relaxed">
+                     ¿Perdiste tu acceso o estás en otro dispositivo? Pon tu correo y te enviamos un enlace para <b>regresar a tu panel personalizado</b> sin contraseñas.
+                   </p>
+                   <input 
+                     type="email" 
+                     placeholder="ejemplo@correo.com" 
+                     value={email}
+                     onChange={(e) => setEmail(e.target.value)}
+                     className="w-full bg-[#0f1115] border border-[#2a2d36] text-white text-sm rounded-lg p-3 outline-none focus:border-[#00e5ff] mb-3"
+                     required
+                   />
+                   <button type="submit" disabled={enviandoLink} className="w-full bg-[#2a2d36] hover:bg-[#363a45] text-white text-sm font-bold py-2.5 rounded-lg transition-colors border border-[#363a45] flex items-center justify-center gap-2">
+                     {enviandoLink ? 'Enviando...' : <><Mail size={16}/> Enviarme enlace de acceso</>}
+                   </button>
+                </div>
+              </form>
+            </div>
           ) : configurado ? (
             <button onClick={() => setView('dashboard')} className="bg-gradient-to-r from-[#00e5ff] to-[#00b2cc] text-black font-bold text-base md:text-lg py-2.5 px-8 md:px-10 rounded-full flex items-center gap-3 hover:scale-105 transition-transform shadow-[0_0_30px_rgba(0,229,255,0.3)]">
               Ir al Panel de Control <ArrowRight />
