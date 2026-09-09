@@ -22,7 +22,7 @@ export default function AppPollada() {
   const [rangoSelInicio, setRangoSelInicio] = useState('')
   const [rangoSelFin, setRangoSelFin] = useState('')
 
-  // ESTADOS DEL LOGIN POR PIN (Sin Google)
+  // ESTADOS DEL LOGIN POR PIN
   const [email, setEmail] = useState('')
   const [codigoOtp, setCodigoOtp] = useState('')
   const [pasoLogin, setPasoLogin] = useState('correo') // 'correo' o 'codigo'
@@ -57,7 +57,7 @@ export default function AppPollada() {
     }
   }
 
-  // 1. PIDE EL CÓDIGO AL CORREO
+  // 1. PIDE EL CÓDIGO DINÁMICO AL CORREO
   async function pedirCodigo(e) {
     e.preventDefault()
     if(!email) return
@@ -95,7 +95,7 @@ export default function AppPollada() {
     } else {
       setPasoLogin('correo')
       setCodigoOtp('')
-      await verificarSesion() // Esto recarga la vista y lo manda al dashboard
+      await verificarSesion()
     }
   }
 
@@ -535,7 +535,6 @@ export default function AppPollada() {
             <Trash2 size={18} /> <span className="inline">Borrar Evento</span>
           </button>
         )}
-        {/* Como quitamos Google, el botón de la cabecera desaparece si no hay usuario logueado */}
         {user && (
           <button onClick={cerrarSesion} className="bg-red-500/10 text-red-500 border border-red-500/20 px-3 py-2 rounded-lg text-sm flex items-center gap-1.5 hover:bg-red-500/25 transition-colors">
             <LogOut size={16} /> Salir
@@ -592,7 +591,7 @@ export default function AppPollada() {
                        placeholder="123456" 
                        maxLength={6}
                        value={codigoOtp}
-                       onChange={(e) => setCodigoOtp(e.target.value.replace(/[^0-9]/g, ''))} // Solo números
+                       onChange={(e) => setCodigoOtp(e.target.value.replace(/[^0-9]/g, ''))}
                        className="w-full bg-[#0f1115] border border-[#00e5ff] text-[#00e5ff] text-center text-3xl tracking-[0.4em] rounded-xl p-4 outline-none focus:border-white mb-4 font-mono font-bold shadow-[0_0_15px_rgba(0,229,255,0.1)]"
                        required
                      />
@@ -616,8 +615,6 @@ export default function AppPollada() {
       </div>
     )
   }
-
-  // ... (El resto del código hacia abajo queda sin tocar)
 
   if (view === 'config') {
     return (
