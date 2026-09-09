@@ -28,6 +28,7 @@ export default function AppPollada() {
   // Estados para el Magic Link
   const [email, setEmail] = useState('')
   const [enviandoLink, setEnviandoLink] = useState(false)
+  const [mostrarEmail, setMostrarEmail] = useState(false) // Oculto por defecto
 
   const saasSwal = Swal.mixin({
     background: '#1a1d24',
@@ -43,29 +44,40 @@ export default function AppPollada() {
     buttonsStyling: false
   })
 
-  // 1. Verificación inicial de sesión normal
   useEffect(() => {
     verificarSesion()
   }, [])
 
-  // 2. MAGIA DE GOOGLE ONE TAP
+  // MAGIA DE GOOGLE ONE TAP Y DETECCIÓN DE SESIÓN
   useEffect(() => {
     if (view === 'landing' && !user) {
       const script = document.createElement('script')
       script.src = 'https://accounts.google.com/gsi/client'
       script.async = true
       script.defer = true
+      
       script.onload = () => {
         if (window.google) {
           window.google.accounts.id.initialize({
             client_id: GOOGLE_CLIENT_ID,
             callback: handleGoogleOneTap,
-            auto_select: true, // Intenta loguear automático si solo hay 1 cuenta
+            auto_select: true, 
             cancel_on_tap_outside: false
           })
-          window.google.accounts.id.prompt() // Dispara la ventanita
+          
+          // Escuchamos lo que hace Google
+          window.google.accounts.id.prompt((notification) => {
+            // Si no detecta cuenta (isNotDisplayed) o si el usuario cierra la ventanita (isSkippedMoment)
+            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+              setMostrarEmail(true)
+            }
+          })
         }
       }
+      
+      // Si el navegador bloquea el script, mostramos el correo por defecto
+      script.onerror = () => setMostrarEmail(true) 
+      
       document.body.appendChild(script)
 
       return () => {
@@ -76,7 +88,6 @@ export default function AppPollada() {
     }
   }, [view, user])
 
-  // Procesador silencioso del login de One Tap
   async function handleGoogleOneTap(response) {
     try {
       const { data, error } = await supabase.auth.signInWithIdToken({
@@ -102,7 +113,6 @@ export default function AppPollada() {
     }
   }
 
-  // Login tradicional Google
   async function iniciarSesionGoogle() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -110,7 +120,6 @@ export default function AppPollada() {
     })
   }
 
-  // Envío del Enlace Mágico por Correo
   async function enviarMagicLink(e) {
     e.preventDefault()
     if(!email) return
@@ -602,30 +611,35 @@ export default function AppPollada() {
                 Continuar con Google <ArrowRight />
               </button>
 
-              <div className="flex items-center gap-3 text-gray-500 text-sm">
-                <span className="flex-1 border-t border-[#2a2d36]"></span>
-                <span>O usa tu correo</span>
-                <span className="flex-1 border-t border-[#2a2d36]"></span>
-              </div>
+              {/* El cuadro del correo solo se muestra si Google indica que NO hay cuenta activa */}
+              {mostrarEmail && (
+                <>
+                  <div className="flex items-center gap-3 text-gray-500 text-sm">
+                    <span className="flex-1 border-t border-[#2a2d36]"></span>
+                    <span>O usa tu correo</span>
+                    <span className="flex-1 border-t border-[#2a2d36]"></span>
+                  </div>
 
-              <form onSubmit={enviarMagicLink} className="flex flex-col gap-3">
-                <div className="text-left bg-[#1a1d24] border border-[#2a2d36] p-4 rounded-xl shadow-lg">
-                   <p className="text-xs text-gray-400 mb-3 leading-relaxed">
-                     ¿Perdiste tu acceso o estás en otro dispositivo? Pon tu correo y te enviamos un enlace para <b>regresar a tu panel personalizado</b> sin contraseñas.
-                   </p>
-                   <input 
-                     type="email" 
-                     placeholder="ejemplo@correo.com" 
-                     value={email}
-                     onChange={(e) => setEmail(e.target.value)}
-                     className="w-full bg-[#0f1115] border border-[#2a2d36] text-white text-sm rounded-lg p-3 outline-none focus:border-[#00e5ff] mb-3"
-                     required
-                   />
-                   <button type="submit" disabled={enviandoLink} className="w-full bg-[#2a2d36] hover:bg-[#363a45] text-white text-sm font-bold py-2.5 rounded-lg transition-colors border border-[#363a45] flex items-center justify-center gap-2">
-                     {enviandoLink ? 'Enviando...' : <><Mail size={16}/> Enviarme enlace de acceso</>}
-                   </button>
-                </div>
-              </form>
+                  <form onSubmit={enviarMagicLink} className="flex flex-col gap-3">
+                    <div className="text-left bg-[#1a1d24] border border-[#2a2d36] p-4 rounded-xl shadow-lg">
+                       <p className="text-xs text-gray-400 mb-3 leading-relaxed">
+                         Ingresa tu correo para acceder sin contraseñas. <br/><br/><b>Nota:</b> Si usas otro dispositivo más adelante, asegúrate de colocar este mismo correo.
+                       </p>
+                       <input 
+                         type="email" 
+                         placeholder="ejemplo@correo.com" 
+                         value={email}
+                         onChange={(e) => setEmail(e.target.value)}
+                         className="w-full bg-[#0f1115] border border-[#2a2d36] text-white text-sm rounded-lg p-3 outline-none focus:border-[#00e5ff] mb-3"
+                         required
+                       />
+                       <button type="submit" disabled={enviandoLink} className="w-full bg-[#2a2d36] hover:bg-[#363a45] text-white text-sm font-bold py-2.5 rounded-lg transition-colors border border-[#363a45] flex items-center justify-center gap-2">
+                         {enviandoLink ? 'Enviando...' : <><Mail size={16}/> Enviarme enlace de acceso</>}
+                       </button>
+                    </div>
+                  </form>
+                </>
+              )}
             </div>
           ) : configurado ? (
             <button onClick={() => setView('dashboard')} className="bg-gradient-to-r from-[#00e5ff] to-[#00b2cc] text-black font-bold text-base md:text-lg py-2.5 px-8 md:px-10 rounded-full flex items-center gap-3 hover:scale-105 transition-transform shadow-[0_0_30px_rgba(0,229,255,0.3)]">
@@ -640,6 +654,8 @@ export default function AppPollada() {
       </div>
     )
   }
+
+  // ... (El resto del código hacia abajo sigue exactamente igual que antes)
 
   if (view === 'config') {
     return (
