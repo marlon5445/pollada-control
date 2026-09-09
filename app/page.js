@@ -65,9 +65,7 @@ export default function AppPollada() {
             cancel_on_tap_outside: false
           })
           
-          // Escuchamos lo que hace Google
           window.google.accounts.id.prompt((notification) => {
-            // Si no detecta cuenta (isNotDisplayed) o si el usuario cierra la ventanita (isSkippedMoment)
             if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
               setMostrarEmail(true)
             }
@@ -75,7 +73,6 @@ export default function AppPollada() {
         }
       }
       
-      // Si el navegador bloquea el script, mostramos el correo por defecto
       script.onerror = () => setMostrarEmail(true) 
       
       document.body.appendChild(script)
@@ -98,7 +95,7 @@ export default function AppPollada() {
       await verificarSesion()
     } catch (error) {
       console.error(error)
-      saasSwal.fire('Aviso', 'Fallo el inicio automático. Usa el botón principal.', 'warning')
+      saasSwal.fire('Aviso', 'Fallo el inicio automático. Usa el botón superior.', 'warning')
     }
   }
 
@@ -607,38 +604,27 @@ export default function AppPollada() {
           
           {!user ? (
             <div className="mt-4 w-full max-w-sm flex flex-col gap-5">
-              <button onClick={iniciarSesionGoogle} className="w-full bg-gradient-to-r from-[#ff2e7e] to-[#e0206a] text-white font-bold text-base md:text-lg py-3 px-6 rounded-full flex justify-center items-center gap-3 hover:scale-105 transition-transform shadow-[0_0_30px_rgba(255,46,126,0.3)]">
-                Continuar con Google <ArrowRight />
-              </button>
-
-              {/* El cuadro del correo solo se muestra si Google indica que NO hay cuenta activa */}
+              {/* Hemos borrado el botón fucsia gigante de aquí. Solo sale el Navbar y este cuadro si es necesario */}
+              
               {mostrarEmail && (
-                <>
-                  <div className="flex items-center gap-3 text-gray-500 text-sm">
-                    <span className="flex-1 border-t border-[#2a2d36]"></span>
-                    <span>O usa tu correo</span>
-                    <span className="flex-1 border-t border-[#2a2d36]"></span>
+                <form onSubmit={enviarMagicLink} className="flex flex-col gap-3">
+                  <div className="text-left bg-[#1a1d24] border border-[#2a2d36] p-4 rounded-xl shadow-lg">
+                     <p className="text-xs text-gray-400 mb-3 leading-relaxed">
+                       Ingresa tu correo para acceder sin contraseñas. <br/><br/><b>Nota:</b> Si usas otro dispositivo más adelante, asegúrate de colocar este mismo correo.
+                     </p>
+                     <input 
+                       type="email" 
+                       placeholder="ejemplo@correo.com" 
+                       value={email}
+                       onChange={(e) => setEmail(e.target.value)}
+                       className="w-full bg-[#0f1115] border border-[#2a2d36] text-white text-sm rounded-lg p-3 outline-none focus:border-[#00e5ff] mb-3"
+                       required
+                     />
+                     <button type="submit" disabled={enviandoLink} className="w-full bg-[#2a2d36] hover:bg-[#363a45] text-white text-sm font-bold py-2.5 rounded-lg transition-colors border border-[#363a45] flex items-center justify-center gap-2">
+                       {enviandoLink ? 'Enviando...' : <><Mail size={16}/> Enviarme enlace de acceso</>}
+                     </button>
                   </div>
-
-                  <form onSubmit={enviarMagicLink} className="flex flex-col gap-3">
-                    <div className="text-left bg-[#1a1d24] border border-[#2a2d36] p-4 rounded-xl shadow-lg">
-                       <p className="text-xs text-gray-400 mb-3 leading-relaxed">
-                         Ingresa tu correo para acceder sin contraseñas. <br/><br/><b>Nota:</b> Si usas otro dispositivo más adelante, asegúrate de colocar este mismo correo.
-                       </p>
-                       <input 
-                         type="email" 
-                         placeholder="ejemplo@correo.com" 
-                         value={email}
-                         onChange={(e) => setEmail(e.target.value)}
-                         className="w-full bg-[#0f1115] border border-[#2a2d36] text-white text-sm rounded-lg p-3 outline-none focus:border-[#00e5ff] mb-3"
-                         required
-                       />
-                       <button type="submit" disabled={enviandoLink} className="w-full bg-[#2a2d36] hover:bg-[#363a45] text-white text-sm font-bold py-2.5 rounded-lg transition-colors border border-[#363a45] flex items-center justify-center gap-2">
-                         {enviandoLink ? 'Enviando...' : <><Mail size={16}/> Enviarme enlace de acceso</>}
-                       </button>
-                    </div>
-                  </form>
-                </>
+                </form>
               )}
             </div>
           ) : configurado ? (
@@ -655,7 +641,7 @@ export default function AppPollada() {
     )
   }
 
-  // ... (El resto del código hacia abajo sigue exactamente igual que antes)
+  // ... (El resto del código hacia abajo queda sin tocar)
 
   if (view === 'config') {
     return (
